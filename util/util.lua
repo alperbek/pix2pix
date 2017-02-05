@@ -6,11 +6,20 @@ local util = {}
 
 require 'torch'
 
+function util.bias_zero(net)
+  net:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)
+end
+
+function util.print_tensor(name, x)
+  print(name, x:size(), x:min(), x:mean(), x:max())
+end
+
+
 function util.normalize(img)
   -- rescale image to 0 .. 1
   local min = img:min()
   local max = img:max()
-  
+
   img = torch.FloatTensor(img:size()):copy(img)
   img:add(-min):mul(1/(max-min))
   return img
@@ -40,14 +49,14 @@ function util.preprocess(img)
     -- RGB to BGR
     local perm = torch.LongTensor{3, 2, 1}
     img = img:index(1, perm)
-    
+
     -- [0,1] to [-1,1]
     img = img:mul(2):add(-1)
-    
+
     -- check that input is in expected range
     assert(img:max()<=1,"badly scaled inputs")
     assert(img:min()>=-1,"badly scaled inputs")
-    
+
     return img
 end
 
@@ -56,11 +65,11 @@ function util.deprocess(img)
     -- BGR to RGB
     local perm = torch.LongTensor{3, 2, 1}
     img = img:index(1, perm)
-    
+
     -- [-1,1] to [0,1]
-    
+
     img = img:add(1):div(2)
-    
+
     return img
 end
 
@@ -92,24 +101,24 @@ function util.deprocessLAB(L, AB)
 --    local AB2 = AB
     L2 = L2:add(1):mul(50.0)
     AB2 = AB2:mul(110.0)
-    
+
     L2 = L2:reshape(1, L2:size(1), L2:size(2))
-    
+
     im_lab = torch.cat(L2, AB2, 1)
     im_rgb = torch.clamp(image.lab2rgb(im_lab):mul(255.0), 0.0, 255.0)/255.0
-    
+
     return im_rgb
 end
 
 function util.deprocessL(L)
     local L2 = torch.Tensor(L:size()):copy(L)
     L2 = L2:add(1):mul(255.0/2.0)
-    
+
     if L2:dim()==2 then
       L2 = L2:reshape(1,L2:size(1),L2:size(2))
     end
     L2 = L2:repeatTensor(L2,3,1,1)/255.0
-    
+
     return L2
 end
 
@@ -123,11 +132,11 @@ end
 
 function util.deprocessLAB_batch(batchL, batchAB)
   local batch = {}
-  
+
   for i = 1, batchL:size(1) do
     batch[i] = util.deprocessLAB(batchL[i]:squeeze(), batchAB[i]:squeeze())
   end
-  
+
   return batch
 end
 
@@ -156,9 +165,9 @@ function util.scaleImage(input, loadSize)
     if input:size(1)==1 then
       input = torch.repeatTensor(input,3,1,1)
     end
-    
+
     input = image.scale(input, loadSize, loadSize)
-    
+
     return input
 end
 
@@ -171,12 +180,12 @@ end
 function util.loadImage(path, loadSize, nc)
     local input = image.load(path, 3, 'float')
     input= util.preprocess(util.scaleImage(input, loadSize))
-    
+
     if nc == 1 then
         input = input[{{1}, {}, {}}]
     end
-    
-    return input 
+
+    return input
 end
 
 
@@ -186,11 +195,11 @@ function util.load(filename, opt)
   if opt.cudnn>0 then
     require 'cudnn'
   end
-  
-  if opt.gpu > 0 then 
+
+  if opt.gpu > 0 then
     require 'cunn'
   end
-  
+
   local net = torch.load(filename)
 
   if opt.gpu > 0 then
@@ -207,8 +216,8 @@ function util.load(filename, opt)
   else
     net:float()
   end
-  net:apply(function(m) if m.weight then 
-  m.gradWeight = m.weight:clone():zero(); 
+  net:apply(function(m) if m.weight then
+  m.gradWeight = m.weight:clone():zero();
   m.gradBias = m.bias:clone():zero(); end end)
   return net
 end
@@ -220,7 +229,7 @@ function util.cudnn(net)
 end
 
 function util.containsValue(table, value)
-  for k, v in pairs(table) do 
+  for k, v in pairs(table) do
     if v == value then return true end
   end
   return false
