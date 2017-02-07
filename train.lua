@@ -54,6 +54,7 @@ opt = {
    use_wgan = 1,               -- use WassersteinGAN (https://github.com/martinarjovsky/WassersteinGAN)
    clamp_weight = 0.01,        -- clamp the weights into [-clamp_weight, clamp_weight]
    D_iters = 5,                -- number of D iters per each G iter
+   win_size = 128,             -- size of display window
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -162,17 +163,26 @@ print(netD)
 
 local criterion = nn.BCECriterion()
 local criterionAE = nn.AbsCriterion()
+local optimStateG, optimStateD = nil, nil
 ---------------------------------------------------------------------------
 
-optimStateG = {
-   learningRate = opt.lr,
-   beta1 = opt.beta1,
-}
-optimStateD = {
-   learningRate = opt.lr,
-   beta1 = opt.beta1,
-}
-
+if opt.use_wgan == 1 then
+  optimStateG = {
+     learningRate = opt.lr,
+  }
+  optimStateD = {
+     learningRate = opt.lr,
+  }
+else
+  optimStateG = {
+     learningRate = opt.lr,
+     beta1 = opt.beta1,
+  }
+  optimStateD = {
+     learningRate = opt.lr,
+     beta1 = opt.beta1,
+  }
+end
 ----------------------------------------------------------------------------
 local real_A = torch.Tensor(opt.batchSize, input_nc, opt.fineSize, opt.fineSize)
 local real_B = torch.Tensor(opt.batchSize, output_nc, opt.fineSize, opt.fineSize)
@@ -376,9 +386,9 @@ for epoch = 1, opt.niter do
             end
 
             for j = 1, D_iters do
-                -- clamp the weights for wgan
+              -- clamp the weights for wgan
               parametersD:clamp(-opt.clamp_weight, opt.clamp_weight)
-              optim.rmsprop(fDx, parametersD, {learningRate=opt.lr,})
+              optim.rmsprop(fDx, parametersD, optimStateD)
               createRealFake()
             end
           else
@@ -388,7 +398,7 @@ for epoch = 1, opt.niter do
         -- os.exit()
         -- (2) Update G network: maximize log(D(x,G(x))) + L1(y,G(x))
         if opt.use_wgan == 1 then
-          optim.rmsprop(fGx, parametersG, {learningRate=opt.lr,})
+          optim.rmsprop(fGx, parametersG, optimStateG)
           -- print('parametersG', parametersG:abs():mean())
         else
           optim.adam(fGx, parametersG, optimStateG)
@@ -397,17 +407,18 @@ for epoch = 1, opt.niter do
         counter = counter + 1
         if counter % opt.display_freq == 0 and opt.display then
             createRealFake()
+            local win_size = opt.win_size
             if opt.preprocess == 'colorization' then
-                local real_A_s = util.scaleBatch(real_A:float(),100,100)
-                local fake_B_s = util.scaleBatch(fake_B:float(),100,100)
-                local real_B_s = util.scaleBatch(real_B:float(),100,100)
+                local real_A_s = util.scaleBatch(real_A:float(), win_size, win_size)
+                local fake_B_s = util.scaleBatch(fake_B:float(), win_size, win_size0)
+                local real_B_s = util.scaleBatch(real_B:float(),  win_size, win_size)
                 disp.image(util.deprocessL_batch(real_A_s), {win=opt.display_id, title=opt.name .. ' input'})
                 disp.image(util.deprocessLAB_batch(real_A_s, fake_B_s), {win=opt.display_id+1, title=opt.name .. ' output'})
                 disp.image(util.deprocessLAB_batch(real_A_s, real_B_s), {win=opt.display_id+2, title=opt.name .. ' target'})
             else
-                disp.image(util.deprocess_batch(util.scaleBatch(real_A:float(),100,100)), {win=opt.display_id, title=opt.name .. ' input'})
-                disp.image(util.deprocess_batch(util.scaleBatch(fake_B:float(),100,100)), {win=opt.display_id+1, title=opt.name .. ' output'})
-                disp.image(util.deprocess_batch(util.scaleBatch(real_B:float(),100,100)), {win=opt.display_id+2, title=opt.name .. ' target'})
+                disp.image(util.deprocess_batch(util.scaleBatch(real_A:float(), win_size, win_size)), {win=opt.display_id, title=opt.name .. ' input'})
+                disp.image(util.deprocess_batch(util.scaleBatch(fake_B:float(), win_size, win_size)), {win=opt.display_id+1, title=opt.name .. ' output'})
+                disp.image(util.deprocess_batch(util.scaleBatch(real_B:float(), win_size, win_size)), {win=opt.display_id+2, title=opt.name .. ' target'})
             end
         end
 
