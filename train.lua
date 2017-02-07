@@ -251,14 +251,14 @@ local fDx = function(x)
 
   if opt.use_wgan == 1 then
     local errD_real = netD:forward(real_AB):clone()
-    local label = torch.FloatTensor(errD_real:size()):fill(real_label)
+    local label = torch.FloatTensor(errD_real:size()):fill(real_label):mul(-1.0)
     if opt.gpu > 0 then
       label = label:cuda()
     end
     netD:backward(real_AB, label)
 
     local errD_fake = netD:forward(fake_AB):clone()
-    label:fill(fake_label)
+    label:fill(fake_label):mul(-1.0)
     netD:backward(fake_AB, label)
     errD = errD_real - errD_fake
     errD = errD:mean()
@@ -302,8 +302,8 @@ local fGx = function(x)
   if opt.use_GAN == 1 then
     local df_do = nil
     if opt.use_wgan == 1 then
-      errG = netD:forward(fake_AB)
-      df_do = torch.FloatTensor(errG:size()):fill(real_label) -- fake labels are real for generator cost
+      errG = -netD:forward(fake_AB)
+      df_do = torch.FloatTensor(errG:size()):fill(real_label):mul(-1.0) -- fake labels are real for generator cost
       if opt.gpu > 0 then
         df_do = df_do:cuda()
       end
@@ -458,12 +458,12 @@ for epoch = 1, opt.niter do
             local loss = {errG=errG and errG or -1, errD=errD and errD or -1, errL1=errL1 and errL1 or -1}
             local curItInBatch = ((i-1) / opt.batchSize)+1
             local totalItInBatch = math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize)
-            local errSum = -errD + errL1
+            local errSum = errD + errL1
             print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
                     .. '  Err_G: %.4f  Err_D: %.4f  ErrL1: %.4f, ErrSum: %.4f'):format(
                      epoch, curItInBatch, totalItInBatch,
                      tm:time().real / opt.batchSize, data_tm:time().real / opt.batchSize,
-                     errG, -errD, errL1, errSum))
+                     errG, errD, errL1, errSum))
             -- update display plot
             if opt.display then
               local plot_vals = { epoch + curItInBatch / totalItInBatch }
