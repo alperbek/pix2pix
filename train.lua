@@ -376,7 +376,6 @@ for epoch = 1, opt.niter do
         tm:reset()
         -- load a batch and run G on that batch
         createRealFake()
-
         -- (1) Update D network: maximize log(D(x,y)) + log(1 - D(x,G(x)))
         if opt.use_GAN == 1 then
           if opt.use_wgan == 1 then
@@ -455,9 +454,28 @@ for epoch = 1, opt.niter do
 
         -- logging and display plot
         if counter % opt.print_freq == 0 then
-            local loss = {errG=errG and errG or -1, errD=errD and errD or -1, errL1=errL1 and errL1 or -1}
             local curItInBatch = ((i-1) / opt.batchSize)+1
             local totalItInBatch = math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize)
+            if opt.use_wgan then
+              local errL1_mean, errD_mean, errG_mean = 0, 0, 0
+              local num_data = 0
+              for j = 1, 64, opt.batchSize do
+                createRealFake()
+                local tmpD = netD:forward(real_AB):mean()
+                local tmpG = netD:forward(fake_AB):mean()
+                errD_mean = errD_mean + (tmpD - tmpG)
+                errG_mean = errG_mean + tmpG
+                local tmpL1 = criterionAE:forward(fake_B, real_B) * opt.lambda
+                errL1_mean = errL1_mean + tmpL1
+                -- print(('errG: %.4f errD: %.4f errL1 %.4f'):format(tmpG, tmpD, tmpL1))
+                num_data = num_data + opt.batchSize
+              end
+
+              errG = errG_mean / num_data
+              errD = errD_mean / num_data
+              errL1 = errL1_mean / num_data
+              -- print(('average errG: %.4f errD: %.4f errL1 %.4f'):format(errG, errD, errL1))
+            end
             local errSum = errD + errL1
             print(('Epoch: [%d][%8d / %8d]\t Time: %.3f  DataTime: %.3f  '
                     .. '  Err_G: %.4f  Err_D: %.4f  ErrL1: %.4f, ErrSum: %.4f'):format(
@@ -466,6 +484,7 @@ for epoch = 1, opt.niter do
                      errG, errD, errL1, errSum))
             -- update display plot
             if opt.display then
+              local loss = {errG=errG and errG or -1, errD=errD and errD or -1, errL1=errL1 and errL1 or -1}
               local plot_vals = { epoch + curItInBatch / totalItInBatch }
               for k, v in ipairs(opt.display_plot) do
                 if loss[v] ~= nil then
