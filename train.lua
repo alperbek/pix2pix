@@ -109,7 +109,8 @@ local ngf = opt.ngf
 local real_label = 1
 local fake_label = 0
 if opt.use_wgan == 1 then
-  fake_label = -1
+  real_label = -1
+  fake_label = 1
 end
 
 function defineG(input_nc, output_nc, ngf)
@@ -251,14 +252,14 @@ local fDx = function(x)
 
   if opt.use_wgan == 1 then
     local errD_real = netD:forward(real_AB):clone()
-    local label = torch.FloatTensor(errD_real:size()):fill(real_label):mul(-1.0)
+    local label = torch.FloatTensor(errD_real:size()):fill(real_label)
     if opt.gpu > 0 then
       label = label:cuda()
     end
     netD:backward(real_AB, label)
 
     local errD_fake = netD:forward(fake_AB):clone()
-    label:fill(fake_label):mul(-1.0)
+    label:fill(fake_label)
     netD:backward(fake_AB, label)
     errD = errD_real - errD_fake
     errD = errD:mean()
@@ -303,7 +304,7 @@ local fGx = function(x)
     local df_do = nil
     if opt.use_wgan == 1 then
       errG = -netD:forward(fake_AB)
-      df_do = torch.FloatTensor(errG:size()):fill(real_label):mul(-1.0) -- fake labels are real for generator cost
+      df_do = torch.FloatTensor(errG:size()):fill(real_label) -- fake labels are real for generator cost
       if opt.gpu > 0 then
         df_do = df_do:cuda()
       end
@@ -386,7 +387,9 @@ for epoch = 1, opt.niter do
 
             for j = 1, D_iters do
               -- clamp the weights for wgan
+              print('before clamp D_param', parametersD:abs():mean())
               parametersD:clamp(-opt.clamp_weight, opt.clamp_weight)
+              print('after clamp D_param', parametersD:abs():mean())
               optim.rmsprop(fDx, parametersD, optimStateD)
               createRealFake()
             end
@@ -464,7 +467,7 @@ for epoch = 1, opt.niter do
                 local tmpD = netD:forward(real_AB):mean()
                 local tmpG = netD:forward(fake_AB):mean()
                 errD_mean = errD_mean + (tmpD - tmpG)
-                errG_mean = errG_mean + tmpG
+                errG_mean = errG_mean - tmpG
                 local tmpL1 = criterionAE:forward(fake_B, real_B) * opt.lambda
                 errL1_mean = errL1_mean + tmpL1
                 -- print(('errG: %.4f errD: %.4f errL1 %.4f'):format(tmpG, tmpD, tmpL1))
